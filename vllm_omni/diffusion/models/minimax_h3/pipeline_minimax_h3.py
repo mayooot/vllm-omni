@@ -1140,13 +1140,10 @@ class MiniMaxH3Pipeline(
         ):
             logger.info("Initial offload of MiniMax H3 Qwen3-VL text encoder to CPU after weights loaded...")
             self.text_encoder.offload_to_cpu()
-            if torch.cuda.is_available():
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-                logger.info(
-                    "Initial text encoder offload complete. Current GPU allocated: %.2f GiB",
-                    torch.cuda.memory_allocated() / (1024**3),
-                )
+            if torch.accelerator.is_available():
+                torch.accelerator.synchronize()
+                torch.accelerator.empty_cache()
+            logger.info("Initial text encoder offload complete.")
         return loaded_with_prefix
 
     @property
@@ -1353,13 +1350,10 @@ class MiniMaxH3Pipeline(
             finally:
                 logger.info("Offloading MiniMax H3 Qwen3-VL text encoder to CPU to free VRAM for DiT...")
                 self.text_encoder.offload_to_cpu()
-                if torch.cuda.is_available():
-                    torch.cuda.synchronize()
-                    torch.cuda.empty_cache()
-                    logger.info(
-                        "Qwen3-VL text encoder offloaded to CPU. Current GPU allocated: %.2f GiB",
-                        torch.cuda.memory_allocated() / (1024**3),
-                    )
+                if torch.accelerator.is_available():
+                    torch.accelerator.synchronize()
+                    torch.accelerator.empty_cache()
+                logger.info("Qwen3-VL text encoder offloaded to CPU.")
 
         # Keep Qwen resident when it is not selected for layerwise offload.
         self.text_encoder.load_to_device()
