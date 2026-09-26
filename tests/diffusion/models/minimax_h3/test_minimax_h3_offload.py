@@ -649,6 +649,7 @@ def test_offload_text_encoder_stages_and_frees_memory():
     pipeline.offload_text_encoder = True
     pipeline._model_cpu_offload_modules = []
     pipeline.text_encoder = Mock()
+    pipeline._release_stage_cache = Mock()
     expected = torch.ones(2, 3)
     pipeline.text_encoder.encode_ids.return_value = expected
 
@@ -658,6 +659,7 @@ def test_offload_text_encoder_stages_and_frees_memory():
     pipeline.text_encoder.load_to_device.assert_called_once_with()
     pipeline.text_encoder.encode_ids.assert_called_once()
     pipeline.text_encoder.offload_to_cpu.assert_called_once_with()
+    pipeline._release_stage_cache.assert_called_once_with()
 
 
 def test_offload_text_encoder_frees_on_exception():
@@ -674,6 +676,7 @@ def test_offload_text_encoder_frees_on_exception():
     pipeline.offload_text_encoder = True
     pipeline._model_cpu_offload_modules = []
     pipeline.text_encoder = Mock()
+    pipeline._release_stage_cache = Mock()
     pipeline.text_encoder.encode_ids.side_effect = RuntimeError("encoding failed")
 
     with pytest.raises(RuntimeError, match="encoding failed"):
@@ -681,3 +684,4 @@ def test_offload_text_encoder_frees_on_exception():
 
     pipeline.text_encoder.load_to_device.assert_called_once_with()
     pipeline.text_encoder.offload_to_cpu.assert_called_once_with()
+    pipeline._release_stage_cache.assert_called_once_with()

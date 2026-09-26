@@ -834,11 +834,7 @@ class MiniMaxH3Pipeline(
         self.device = get_local_device()
         self.load_text_encoder = od_config.model_loaded.get("text_encoder", True)
         self.load_vae_encoder = od_config.model_loaded.get("vae_encoder", True)
-        self.offload_text_encoder = (
-            bool(getattr(od_config, "offload_text_encoder", False))
-            or bool(od_config.model_config.get("offload_text_encoder", False))
-            or os.environ.get("VLLM_OMNI_OFFLOAD_TEXT_ENCODER", "0").lower() in ("1", "true")
-        )
+        self.offload_text_encoder = bool(getattr(od_config, "offload_text_encoder", False))
         if self.load_vae_encoder is False and self.load_text_encoder is True:
             raise ValueError(
                 "MiniMax H3 does not support local text encoding with external media conditioning; "
@@ -1140,9 +1136,7 @@ class MiniMaxH3Pipeline(
         ):
             logger.info("Initial offload of MiniMax H3 Qwen3-VL text encoder to CPU after weights loaded...")
             self.text_encoder.offload_to_cpu()
-            if torch.accelerator.is_available():
-                torch.accelerator.synchronize()
-                torch.accelerator.empty_cache()
+            self._release_stage_cache()
             logger.info("Initial text encoder offload complete.")
         return loaded_with_prefix
 
@@ -1350,9 +1344,7 @@ class MiniMaxH3Pipeline(
             finally:
                 logger.info("Offloading MiniMax H3 Qwen3-VL text encoder to CPU to free VRAM for DiT...")
                 self.text_encoder.offload_to_cpu()
-                if torch.accelerator.is_available():
-                    torch.accelerator.synchronize()
-                    torch.accelerator.empty_cache()
+                self._release_stage_cache()
                 logger.info("Qwen3-VL text encoder offloaded to CPU.")
 
         # Keep Qwen resident when it is not selected for layerwise offload.
