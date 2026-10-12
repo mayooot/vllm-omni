@@ -1591,13 +1591,20 @@ class MiniMaxH3Pipeline(
                 self.device,
                 getattr(self, "_dit_rank", 0),
             )
-            self.text_encoder.load_to_device()
             try:
+                self.text_encoder.load_to_device()
                 return self.text_encoder.encode_ids(input_ids, **vision_kwargs)
             finally:
                 logger.info("Offloading MiniMax H3 Qwen3-VL text encoder to CPU to free VRAM for DiT...")
-                self.text_encoder.offload_to_cpu()
-                self._release_stage_cache()
+                try:
+                    self.text_encoder.offload_to_cpu()
+                except BaseException:
+                    logger.exception("Failed to release MiniMax H3 text encoder after staging")
+                finally:
+                    try:
+                        self._release_stage_cache()
+                    except BaseException:
+                        logger.exception("Failed to release allocator cache after text encoder offload")
                 logger.info("Qwen3-VL text encoder offloaded to CPU.")
 
         # Keep Qwen resident when it is not selected for layerwise offload.

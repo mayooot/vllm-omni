@@ -688,3 +688,54 @@ def test_offload_text_encoder_frees_on_exception():
     pipeline.text_encoder.load_to_device.assert_called_once_with()
     pipeline.text_encoder.offload_to_cpu.assert_called_once_with()
     pipeline._release_stage_cache.assert_called_once_with()
+
+
+def test_offload_text_encoder_frees_on_load_exception():
+    from vllm_omni.diffusion.models.minimax_h3 import MiniMaxH3Pipeline
+
+    pipeline = object.__new__(MiniMaxH3Pipeline)
+    torch.nn.Module.__init__(pipeline)
+    pipeline.od_config = SimpleNamespace(
+        enable_cpu_offload=False,
+        enable_layerwise_offload=False,
+        enable_distributed_layerwise_offload=False,
+        offload_text_encoder=True,
+    )
+    pipeline.offload_text_encoder = True
+    pipeline._model_cpu_offload_modules = []
+    pipeline.text_encoder = Mock()
+    pipeline._release_stage_cache = Mock()
+    pipeline.text_encoder.load_to_device.side_effect = RuntimeError("load failed")
+
+    with pytest.raises(RuntimeError, match="load failed"):
+        pipeline._encode_text_hidden(torch.tensor([1, 2]), {})
+
+    pipeline.text_encoder.load_to_device.assert_called_once_with()
+    pipeline.text_encoder.offload_to_cpu.assert_called_once_with()
+    pipeline._release_stage_cache.assert_called_once_with()
+
+
+def test_offload_text_encoder_preserves_error_when_offload_fails():
+    from vllm_omni.diffusion.models.minimax_h3 import MiniMaxH3Pipeline
+
+    pipeline = object.__new__(MiniMaxH3Pipeline)
+    torch.nn.Module.__init__(pipeline)
+    pipeline.od_config = SimpleNamespace(
+        enable_cpu_offload=False,
+        enable_layerwise_offload=False,
+        enable_distributed_layerwise_offload=False,
+        offload_text_encoder=True,
+    )
+    pipeline.offload_text_encoder = True
+    pipeline._model_cpu_offload_modules = []
+    pipeline.text_encoder = Mock()
+    pipeline._release_stage_cache = Mock()
+    pipeline.text_encoder.encode_ids.side_effect = RuntimeError("encoding failed")
+    pipeline.text_encoder.offload_to_cpu.side_effect = RuntimeError("offload failed")
+
+    with pytest.raises(RuntimeError, match="encoding failed"):
+        pipeline._encode_text_hidden(torch.tensor([1, 2]), {})
+
+    pipeline.text_encoder.load_to_device.assert_called_once_with()
+    pipeline.text_encoder.offload_to_cpu.assert_called_once_with()
+    pipeline._release_stage_cache.assert_called_once_with()
