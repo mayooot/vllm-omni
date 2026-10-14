@@ -1308,7 +1308,6 @@ class MiniMaxH3Pipeline(
         if (
             getattr(self, "offload_text_encoder", False)
             and getattr(self, "text_encoder", None) is not None
-            and not self._uses_manual_component_offload(self.text_encoder)
         ):
             logger.info("Initial offload of MiniMax H3 Qwen3-VL text encoder to CPU after weights loaded...")
             self.text_encoder.offload_to_cpu()
@@ -1585,33 +1584,13 @@ class MiniMaxH3Pipeline(
             with self._component_on_device(self.text_encoder):
                 return self.text_encoder.encode_ids(input_ids, **vision_kwargs)
 
-        if getattr(self, "offload_text_encoder", False):
-            logger.info(
-                "Moving MiniMax H3 Qwen3-VL text encoder to device: %s (rank=%d)...",
-                self.device,
-                getattr(self, "_dit_rank", 0),
-            )
-            try:
-                self.text_encoder.load_to_device()
-                return self.text_encoder.encode_ids(input_ids, **vision_kwargs)
-            finally:
-                logger.info("Offloading MiniMax H3 Qwen3-VL text encoder to CPU to free VRAM for DiT...")
-                try:
-                    self.text_encoder.offload_to_cpu()
-                except BaseException:
-                    logger.exception("Failed to release MiniMax H3 text encoder after staging")
-                finally:
-                    try:
-                        self._release_stage_cache()
-                    except BaseException:
-                        logger.exception("Failed to release allocator cache after text encoder offload")
-                logger.info("Qwen3-VL text encoder offloaded to CPU.")
-
         # Keep Qwen resident when it is not selected for layerwise offload.
         self.text_encoder.load_to_device()
         return self.text_encoder.encode_ids(input_ids, **vision_kwargs)
 
     def _uses_manual_component_offload(self, component: nn.Module) -> bool:
+        if getattr(self, "offload_text_encoder", False) and component is getattr(self, "text_encoder", None):
+            return True
         od_config = getattr(self, "od_config", None)
         if od_config is None:
             return False
@@ -1717,6 +1696,11 @@ class MiniMaxH3Pipeline(
                         cache.release_if_needed(force=True)
                     except BaseException:
                         logger.exception("Failed to release retained allocator cache after component failure")
+                elif getattr(self, "offload_text_encoder", False) and component is getattr(self, "text_encoder", None):
+                    try:
+                        self._release_stage_cache()
+                    except BaseException:
+                        logger.exception("Failed to release allocator cache after component failure")
             raise
         else:
             if staged:
@@ -1729,7 +1713,14 @@ class MiniMaxH3Pipeline(
                             cache.release_if_needed(force=True)
                         except BaseException:
                             logger.exception("Failed to release retained allocator cache after offload failure")
+                    elif getattr(self, "offload_text_encoder", False) and component is getattr(self, "text_encoder", None):
+                        try:
+                            self._release_stage_cache()
+                        except BaseException:
+                            logger.exception("Failed to release allocator cache after offload failure")
                     raise
+                if getattr(self, "offload_text_encoder", False) and component is getattr(self, "text_encoder", None):
+                    self._release_stage_cache()
 
     @staticmethod
     def _is_output_owner_rank() -> bool:
