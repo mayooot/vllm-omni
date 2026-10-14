@@ -739,3 +739,23 @@ def test_offload_text_encoder_preserves_error_when_offload_fails():
     pipeline.text_encoder.load_to_device.assert_called_once_with()
     pipeline.text_encoder.offload_to_cpu.assert_called_once_with()
     pipeline._release_stage_cache.assert_called_once_with()
+
+
+def test_uses_manual_component_offload_recognizes_offload_text_encoder():
+    from vllm_omni.diffusion.models.minimax_h3 import MiniMaxH3Pipeline
+
+    pipeline = object.__new__(MiniMaxH3Pipeline)
+    torch.nn.Module.__init__(pipeline)
+    pipeline.od_config = SimpleNamespace(
+        enable_cpu_offload=False,
+        enable_layerwise_offload=False,
+        enable_distributed_layerwise_offload=False,
+        offload_text_encoder=True,
+        diffusion_offload_config=None,
+    )
+    pipeline.offload_text_encoder = True
+    pipeline.text_encoder = Mock()
+    pipeline.video_vae = Mock()
+
+    assert pipeline._uses_manual_component_offload(pipeline.text_encoder) is True
+    assert pipeline._uses_manual_component_offload(pipeline.video_vae) is False
