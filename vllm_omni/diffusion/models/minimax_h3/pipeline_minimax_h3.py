@@ -1233,10 +1233,7 @@ class MiniMaxH3Pipeline(
             }
             if missing_gates := required_gates - transformer_loaded:
                 raise ValueError(f"FastH3 V2 checkpoint is missing compression gates: {sorted(missing_gates)}")
-        if (
-            getattr(self, "offload_text_encoder", False)
-            and getattr(self, "text_encoder", None) is not None
-        ):
+        if getattr(self, "offload_text_encoder", False) and getattr(self, "text_encoder", None) is not None:
             logger.info("Initial offload of MiniMax H3 Qwen3-VL text encoder to CPU after weights loaded...")
             self.text_encoder.offload_to_cpu()
             self._release_stage_cache()
@@ -1608,6 +1605,9 @@ class MiniMaxH3Pipeline(
                 yield
             return
         staged = self._uses_manual_component_offload(component)
+        is_text_encoder = getattr(self, "offload_text_encoder", False) and component is getattr(
+            self, "text_encoder", None
+        )
         try:
             if staged:
                 component.load_to_device()
@@ -1624,7 +1624,7 @@ class MiniMaxH3Pipeline(
                         cache.release_if_needed(force=True)
                     except BaseException:
                         logger.exception("Failed to release retained allocator cache after component failure")
-                elif getattr(self, "offload_text_encoder", False) and component is getattr(self, "text_encoder", None):
+                elif is_text_encoder:
                     try:
                         self._release_stage_cache()
                     except BaseException:
@@ -1641,13 +1641,13 @@ class MiniMaxH3Pipeline(
                             cache.release_if_needed(force=True)
                         except BaseException:
                             logger.exception("Failed to release retained allocator cache after offload failure")
-                    elif getattr(self, "offload_text_encoder", False) and component is getattr(self, "text_encoder", None):
+                    elif is_text_encoder:
                         try:
                             self._release_stage_cache()
                         except BaseException:
                             logger.exception("Failed to release allocator cache after offload failure")
                     raise
-                if getattr(self, "offload_text_encoder", False) and component is getattr(self, "text_encoder", None):
+                if is_text_encoder:
                     self._release_stage_cache()
 
     @staticmethod
